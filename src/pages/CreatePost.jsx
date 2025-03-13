@@ -1,8 +1,32 @@
-import { useState, useRef } from 'react';
-import { useForm } from 'react-hook-form';
+import { useState, useRef, useEffect } from 'react';
 import { FaFacebook, FaLinkedin, FaReddit, FaTwitter, FaUpload, FaTimes } from 'react-icons/fa';
-
+import { isValidImageType } from '../utils/ValidationImageType';
+import { getSocialAccountsOfUser } from '../services/SocialAccountService';
 export default function CreatePost() {
+    const access_token = localStorage.getItem('access_token');
+    const [errorScheduleTime, setErrorScheduleTime] = useState('');
+    const [errorPlatform, setErrorPlatform] = useState('');
+    const [errorImage, setErrorImage] = useState('');
+    const fileInputRef = useRef(null);
+    const [schedule, setSchedule] = useState(false);
+    const [content, setContent] = useState('');
+    const [scheduleTime, setScheduleTime] = useState('');
+    const [imagesPreview, setImagesPreview] = useState([]);
+    const [images, setImages] = useState([]);
+    const [selectedPlatform, setSelectedPlatform] = useState([]);
+
+    useEffect(() => {
+        fetchSocialAccounts();
+    }, []);
+
+    const fetchSocialAccounts = async () => {
+        const response = await getSocialAccountsOfUser();
+        if (response && response.status === 200) {
+            setListSocialAccount([...response.data.data]);
+        }
+    };
+    const [listSocialAccount, setListSocialAccount] = useState([]);
+
     const list_platform = [
         {
             name: 'Facebook',
@@ -22,38 +46,112 @@ export default function CreatePost() {
         {
             name: 'Twitter',
             icon: <FaTwitter className="mr-[8px] text-blue-400" />,
-            link: '#',
+            link: `http://localhost:8000/login/twitter?access-token=${access_token}`,
         },
     ];
-    const fileInputRef = useRef(null);
-    const { register, handleSubmit } = useForm();
-    const [schedule, setSchedule] = useState(false);
-    const [content, setContent] = useState('');
-    const [scheduleTime, setScheduleTime] = useState('');
-    const onSubmit = (data) => {
-        console.log(data);
-        console.log(content);
-        console.log(schedule, scheduleTime);
-        console.log(files);
+
+    useEffect(() => {
+        const handleMessage = (event) => {
+            if (event.origin !== 'http://localhost:8000') return;
+
+            const { socialAccount } = event.data;
+            if (socialAccount) {
+                console.log(socialAccount);
+                setListSocialAccount([
+                    ...listSocialAccount,
+                    {
+                        screen_name: socialAccount.screen_name,
+                        platform: socialAccount.platform,
+                    },
+                ]);
+            }
+        };
+
+        window.addEventListener('message', handleMessage);
+
+        return () => {
+            window.removeEventListener('message', handleMessage);
+        };
+    }, []);
+    const handleLogin = async (link) => {
+        const popup = window.open(link, 'Twitter Login', 'width=600,height=600');
     };
 
-    const [images, setImages] = useState([]);
-    const [files, setFiles] = useState([]);
-    const handleImageUpload = (event) => {
-        const files = Array.from(event.target.files);
-        setFiles(files);
-        const imageUrls = files.map((file) => URL.createObjectURL(file));
-        setImages([...images, ...imageUrls]);
+    const onSubmit = () => {
+        const selectedTime = new Date(scheduleTime);
+        const now = Date.now();
+        if (schedule) {
+            if (!scheduleTime) {
+                setErrorScheduleTime('Invalid schedule time.');
+                return;
+            } else if (selectedTime <= now) {
+                setErrorScheduleTime('Schedule time must be in the future.');
+                return;
+            } else {
+                setErrorScheduleTime('');
+            }
+        }
+
+        if (selectedPlatform.length === 0) {
+            setErrorPlatform('Please select at least one platform.');
+            return;
+        } else {
+            setErrorPlatform('');
+        }
+
+        const request = {
+            content,
+            listPlatforms: selectedPlatform,
+            mediaUrls: images,
+            scheduledTime: schedule
+                ? selectedTime.toLocaleString('sv-SE').replace('T', ' ')
+                : new Date().toLocaleString('sv-SE').replace('T', ' '),
+        };
+        console.log(imagesPreview);
+        console.log(request);
+    };
+
+    const getSocialAccountOfUser = (platform) => {
+        return listSocialAccount && listSocialAccount.find((value) => value.platform === platform.toUpperCase());
+    };
+
+    const handlePlatformChange = (platform) => {
+        const updatedPlatforms = selectedPlatform.includes(platform)
+            ? selectedPlatform.filter((item) => item !== platform)
+            : [...selectedPlatform, platform];
+        setSelectedPlatform(updatedPlatforms);
+        if (updatedPlatforms.length > 0) setErrorPlatform('');
+    };
+
+    const handleImageUpload = (e) => {
+        setErrorImage('');
+        const files = Array.from(e.target.files);
+        const newImages = [];
+        const newImagePreviews = [];
+
+        files.forEach((element) => {
+            if (isValidImageType(element)) {
+                newImages.push(element);
+                const previewUrls = URL.createObjectURL(element);
+                newImagePreviews.push(previewUrls);
+            } else {
+                e.target.value = null;
+                setErrorImage('Invalid image. Select image valid type (JPEG, PNG, GIF, WEBP)');
+            }
+        });
+
+        setImages([...images, ...newImages]);
+        setImagesPreview([...imagesPreview, ...newImagePreviews]);
     };
 
     const removeImage = (index) => {
+        setImagesPreview(imagesPreview.filter((_, i) => i !== index));
         setImages(images.filter((_, i) => i !== index));
-        setFiles(files.filter((_, i) => i !== index));
     };
 
     return (
         <div className="rounded-[8px] bg-white p-[16px]">
-            <form onSubmit={handleSubmit(onSubmit)}>
+            <form>
                 <div className="mb-[16px]">
                     <label htmlFor="content" className="mb-[8px] block text-[16px] text-[#374151]">
                         Content
@@ -62,7 +160,7 @@ export default function CreatePost() {
                         name="content"
                         id="content"
                         value={content}
-                        className="h-[200px] w-full rounded-[8px] border-[1px] border-[#D1D5DB] p-[12px_24px] text-[#4B5563] outline-none"
+                        className="h-[100px] w-full rounded-[8px] border-[1px] border-[#D1D5DB] p-[12px_24px] text-[#4B5563] outline-none"
                         onChange={(e) => {
                             setContent(e.target.value);
                         }}
@@ -94,20 +192,23 @@ export default function CreatePost() {
                                 setScheduleTime(e.target.value);
                             }}
                         />
+
+                        {errorScheduleTime && <p className="mt-[8px] text-sm text-red-500">{errorScheduleTime}</p>}
                     </div>
                 )}
 
                 <div>
-                    <label htmlFor="schedule_time" className="mb-[8px] block text-[16px] text-[#374151]">
-                        Select images
-                    </label>
+                    <p className="mb-[8px] block text-[16px] text-[#374151]">Select images</p>
                     <div className="w-full">
                         <button
-                            className="flex cursor-pointer items-center rounded bg-gray-200 p-2"
+                            type="button"
+                            className="flex cursor-pointer items-center rounded bg-gray-200 p-2 hover:opacity-[0.8]"
                             onClick={() => fileInputRef.current.click()}
                         >
                             <FaUpload className="mr-2" /> Upload Images
                         </button>
+
+                        {errorImage && <p className="mt-[8px] text-sm text-red-500">{errorImage}</p>}
                         <input
                             type="file"
                             multiple
@@ -116,9 +217,9 @@ export default function CreatePost() {
                             onChange={handleImageUpload}
                         />
 
-                        {images.length > 0 && (
+                        {imagesPreview.length > 0 && (
                             <div className="mt-4 grid grid-cols-16 gap-2">
-                                {images.map((src, index) => (
+                                {imagesPreview.map((src, index) => (
                                     <div key={index} className="relative">
                                         <img src={src} alt="Uploaded" className="h-24 w-24 rounded object-cover" />
                                         <button
@@ -135,26 +236,55 @@ export default function CreatePost() {
                 </div>
 
                 <div className="my-[16px]">
-                    <label htmlFor="schedule_time" className="mb-[8px] block text-[16px] text-[#374151]">
-                        Select social platform
-                    </label>
-                    <div className="">
-                        {list_platform.map((platform, index) => (
-                            <div key={index} className="mb-2 flex items-center">
-                                <input type="checkbox" {...register(platform.name.toLowerCase())} className="mr-2" />
-                                {platform.icon}
-                                <span>{platform.name}</span>
-                                <a href={platform.link} className="ml-[16px] text-[#2563EB]">
-                                    Login
-                                </a>
-                            </div>
-                        ))}
+                    <p className="mb-[8px] block text-[16px] text-[#374151]">Select social platform</p>
+                    <div>
+                        {list_platform.map((platform, index) => {
+                            const socialAccount = getSocialAccountOfUser(platform.name);
+                            return (
+                                <div key={index} className="mb-2 flex items-center">
+                                    <input
+                                        id={platform.name}
+                                        value={platform.name}
+                                        checked={
+                                            selectedPlatform.includes(platform.name.toUpperCase()) &&
+                                            socialAccount !== undefined
+                                        }
+                                        onChange={() => handlePlatformChange(platform.name.toUpperCase())}
+                                        type="checkbox"
+                                        disabled={socialAccount === undefined && true}
+                                        className="mr-2"
+                                    />
+                                    <label className="flex items-center" htmlFor={platform.name}>
+                                        {platform.icon}
+                                        <span>{platform.name}</span>
+                                    </label>
+                                    {socialAccount === undefined ? (
+                                        <span
+                                            href={platform.link}
+                                            onClick={() => handleLogin(platform.link)}
+                                            className="ml-[16px] cursor-pointer text-[#2563EB]"
+                                        >
+                                            Login
+                                        </span>
+                                    ) : (
+                                        <span className="ml-[16px] text-[#2563EB]">{socialAccount.screen_name}</span>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
+                    {errorPlatform && <p className="mt-[8px] text-sm text-red-500">{errorPlatform}</p>}
                 </div>
 
-                <button className="w-full cursor-pointer rounded bg-[#2563EB] p-2 text-white hover:opacity-[0.9]">
-                    Post Now
-                </button>
+                <div className="flex items-center justify-center">
+                    <button
+                        type="button"
+                        onClick={onSubmit}
+                        className="w-[30%] cursor-pointer rounded bg-[#2563EB] p-2 text-white hover:opacity-[0.9]"
+                    >
+                        Post Now
+                    </button>
+                </div>
             </form>
         </div>
     );
