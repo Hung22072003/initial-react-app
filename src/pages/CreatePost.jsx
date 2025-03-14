@@ -14,6 +14,7 @@ export default function CreatePost() {
     const [imagesPreview, setImagesPreview] = useState([]);
     const [images, setImages] = useState([]);
     const [selectedPlatform, setSelectedPlatform] = useState([]);
+    const [listSocialAccount, setListSocialAccount] = useState([]);
 
     useEffect(() => {
         fetchSocialAccounts();
@@ -22,10 +23,9 @@ export default function CreatePost() {
     const fetchSocialAccounts = async () => {
         const response = await getSocialAccountsOfUser();
         if (response && response.status === 200) {
-            setListSocialAccount([...response.data.data]);
+            setListSocialAccount((prev) => [...prev, ...response.data.data]);
         }
     };
-    const [listSocialAccount, setListSocialAccount] = useState([]);
 
     const list_platform = [
         {
@@ -36,7 +36,7 @@ export default function CreatePost() {
         {
             name: 'LinkedIn',
             icon: <FaLinkedin className="mr-[8px] text-[#1D4ED8]" />,
-            link: '#',
+            link: `http://localhost:8000/login/linkedin?access-token=${access_token}`,
         },
         {
             name: 'Reddit',
@@ -57,8 +57,8 @@ export default function CreatePost() {
             const { socialAccount } = event.data;
             if (socialAccount) {
                 console.log(socialAccount);
-                setListSocialAccount([
-                    ...listSocialAccount,
+                setListSocialAccount((prev) => [
+                    ...prev,
                     {
                         screen_name: socialAccount.screen_name,
                         platform: socialAccount.platform,
@@ -74,7 +74,7 @@ export default function CreatePost() {
         };
     }, []);
     const handleLogin = async (link) => {
-        const popup = window.open(link, 'Twitter Login', 'width=600,height=600');
+        window.open(link, 'Twitter Login', 'width=600,height=600');
     };
 
     const onSubmit = () => {
