@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { FaFacebook, FaLinkedin, FaReddit, FaTwitter, FaUpload, FaTimes } from 'react-icons/fa';
 import { isValidImageType } from '../utils/ValidationImageType';
 import { getSocialAccountsOfUser } from '../services/SocialAccountService';
+import { post, postToLinkedin } from '../services/PostService';
+import { FiLoader } from 'react-icons/fi';
 export default function CreatePost() {
     const access_token = localStorage.getItem('access_token');
     const [errorScheduleTime, setErrorScheduleTime] = useState('');
@@ -16,6 +18,7 @@ export default function CreatePost() {
     const [selectedPlatform, setSelectedPlatform] = useState([]);
     const [listSocialAccount, setListSocialAccount] = useState([]);
 
+    const [loading, setLoading] = useState(false);
     useEffect(() => {
         fetchSocialAccounts();
     }, []);
@@ -77,7 +80,7 @@ export default function CreatePost() {
         window.open(link, 'Twitter Login', 'width=600,height=600');
     };
 
-    const onSubmit = () => {
+    const onSubmit = async () => {
         const selectedTime = new Date(scheduleTime);
         const now = Date.now();
         if (schedule) {
@@ -103,12 +106,25 @@ export default function CreatePost() {
             content,
             listPlatforms: selectedPlatform,
             mediaUrls: images,
-            scheduledTime: schedule
-                ? selectedTime.toLocaleString('sv-SE').replace('T', ' ')
-                : new Date().toLocaleString('sv-SE').replace('T', ' '),
+            scheduledTime: schedule && selectedTime.toLocaleString('sv-SE').replace('T', ' '),
         };
         console.log(imagesPreview);
         console.log(request);
+
+        try {
+            setLoading(true);
+            const response = await post(
+                content,
+                images,
+                selectedPlatform,
+                schedule ? selectedTime.toLocaleString('sv-SE').replace('T', ' ') : null,
+            );
+            console.log(response);
+        } catch (e) {
+            console.log(e);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const getSocialAccountOfUser = (platform) => {
@@ -282,7 +298,7 @@ export default function CreatePost() {
                         onClick={onSubmit}
                         className="w-[30%] cursor-pointer rounded bg-[#2563EB] p-2 text-white hover:opacity-[0.9]"
                     >
-                        Post Now
+                        {loading ? <FiLoader /> : 'Post Now'}
                     </button>
                 </div>
             </form>
